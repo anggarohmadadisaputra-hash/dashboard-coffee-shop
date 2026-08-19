@@ -114,7 +114,7 @@ def prepare_apriori_data(df):
           .sum().unstack().reset_index().fillna(0)
           .set_index('Transaction_ID'))
     
-    basket_sets = basket.applymap(encode_units)
+    basket_sets = basket.map(encode_units)
     return basket_sets
 
 # --- 4. SIDEBAR ---
