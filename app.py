@@ -128,12 +128,47 @@ with st.sidebar:
     if uploaded_file is not None:
         try:
             if uploaded_file.name.endswith('.csv'):
-                df = pd.read_csv(uploaded_file)
+                raw_df = pd.read_csv(uploaded_file)
             else:
-                df = pd.read_excel(uploaded_file)
+                raw_df = pd.read_excel(uploaded_file)
             st.success("File berhasil diupload!")
+            
+            st.markdown("---")
+            st.subheader("Pemetaan Kolom (Data Mapping)")
+            st.info("Pilih kolom dari dataset Anda yang sesuai:")
+            
+            col_names = raw_df.columns.tolist()
+            
+            # Helper to find default index
+            def find_idx(keywords):
+                for i, col in enumerate(col_names):
+                    if any(k in str(col).lower() for k in keywords):
+                        return i
+                return 0
+                
+            tx_col = st.selectbox("Kolom ID Transaksi:", col_names, index=find_idx(['id', 'trans', 'nota']))
+            date_col = st.selectbox("Kolom Tanggal:", col_names, index=find_idx(['date', 'tanggal', 'waktu']))
+            item_col = st.selectbox("Kolom Nama Produk/Menu:", col_names, index=find_idx(['item', 'product', 'menu', 'barang']))
+            
+            # Process data
+            raw_df = raw_df.dropna(subset=[tx_col, date_col, item_col])
+            
+            # Group by transaction ID to combine items
+            grouped = raw_df.groupby([tx_col, date_col])[item_col].apply(lambda x: ', '.join(x.astype(str))).reset_index()
+            grouped.columns = ['Transaction_ID', 'Date', 'Items_Purchased']
+            
+            # Try to get time if available
+            time_col = st.selectbox("Kolom Jam (Opsional):", ["Kosongkan"] + col_names, index=0)
+            if time_col != "Kosongkan":
+                time_grouped = raw_df.groupby([tx_col, date_col])[time_col].first().reset_index()
+                grouped['Time'] = time_grouped[time_col]
+            else:
+                grouped['Time'] = "00:00"
+                
+            df = grouped
+            
         except Exception as e:
-            st.error(f"Error membaca file: {e}")
+            st.error(f"Error memproses file: {e}")
             df = generate_dummy_data()
     else:
         st.info("Menggunakan Dummy Data. Silakan upload file untuk analisis data Anda sendiri.")
@@ -149,14 +184,21 @@ with st.sidebar:
     st.subheader("Filter Data")
     
     # Ensure Date is datetime
-    df['Date'] = pd.to_datetime(df['Date'])
+    try:
+        df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+        df = df.dropna(subset=['Date'])
+    except:
+        pass
     
-    date_range = st.date_input(
-        "Rentang Tanggal",
-        value=(df['Date'].min(), df['Date'].max()),
-        min_value=df['Date'].min(),
-        max_value=df['Date'].max()
-    )
+    if not df.empty:
+        date_range = st.date_input(
+            "Rentang Tanggal",
+            value=(df['Date'].min(), df['Date'].max()),
+            min_value=df['Date'].min(),
+            max_value=df['Date'].max()
+        )
+    else:
+        date_range = []
     
     if 'Time_Category' in df.columns:
         time_filter = st.multiselect(
@@ -255,13 +297,22 @@ with tab1:
         
     with col_chart2:
         st.subheader("🕒 Tren Transaksi Berdasarkan Jam")
-        if not filtered_df.empty:
-            filtered_df['Hour'] = pd.to_datetime(filtered_df['Time'], format='%H:%M').dt.hour
-            hourly_tx = filtered_df.groupby('Hour').size().reset_index(name='Jumlah Transaksi')
-            fig2 = px.line(hourly_tx, x='Hour', y='Jumlah Transaksi', markers=True, 
-                           line_shape='spline', color_discrete_sequence=['#6F4E37'])
-            fig2.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-            st.plotly_chart(fig2, use_container_width=True)
+        if not filtered_df.empty and 'Time' in filtered_df.columns:
+            try:
+                # Convert time to string, handle mixed formats
+                filtered_df['Hour'] = pd.to_datetime(filtered_df['Time'].astype(str), format='mixed', errors='coerce').dt.hour
+                hourly_tx = filtered_df.dropna(subset=['Hour']).groupby('Hour').size().reset_index(name='Jumlah Transaksi')
+                if not hourly_tx.empty:
+                    fig2 = px.line(hourly_tx, x='Hour', y='Jumlah Transaksi', markers=True, 
+                                   line_shape='spline', color_discrete_sequence=['#6F4E37'])
+                    fig2.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+                    st.plotly_chart(fig2, use_container_width=True)
+                else:
+                    st.info("Format waktu pada kolom tidak dapat diproses.")
+            except Exception as e:
+                st.info("Tidak dapat menampilkan grafik jam.")
+        else:
+            st.info("Data jam tidak tersedia.")
         
     st.subheader("🛒 Distribusi Ukuran Keranjang (Basket Size)")
     if not filtered_df.empty:
