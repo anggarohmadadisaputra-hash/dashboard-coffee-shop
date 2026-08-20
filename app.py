@@ -12,7 +12,7 @@ from datetime import datetime
 # 1. KONFIGURASI HALAMAN & TEMA COFFEE SHOP
 # ==========================================
 st.set_page_config(
-    page_title="Brew Analytics - Coffee Shop Dashboard",
+    page_title="Kelompok 8 Analytics - Coffee Shop Dashboard",
     page_icon="☕",
     layout="wide"
 )
@@ -145,7 +145,7 @@ def parse_coffee_sales_data(uploaded_file):
 # ==========================================
 # 3. SIDEBAR & FILE LOADING
 # ==========================================
-st.sidebar.title("☕ BREW ANALYTICS")
+st.sidebar.title("☕ Coffe Shop ANALYTICS")
 st.sidebar.caption("Coffee Shop Market Basket Analysis")
 st.sidebar.markdown("---")
 
